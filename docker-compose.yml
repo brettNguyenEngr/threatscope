@@ -7,7 +7,7 @@ services:
       - "8000:8000"
     container_name: threatscope_backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/\")' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
