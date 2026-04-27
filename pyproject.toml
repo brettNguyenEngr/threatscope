@@ -1,0 +1,34 @@
+[project]
+name = "threatscope"
+version = "0.1.0"
+description = "An agentic cybersecurity scanner using Nmap, RAG, and LLMs."
+dependencies = [
+    # --- Backend & API (FastAPI) ---
+    "fastapi >= 0.111.0",
+    "uvicorn >= 0.30.0",
+    "python-dotenv >= 1.0.0",
+    "pydantic >= 2.0.0",
+
+    # --- AI & RAG (Ported from Lab 8/9) ---
+    "chromadb >= 0.5.0",
+    "sentence-transformers >= 3.0.0",
+    "requests >= 2.32.0",
+    "openai >= 1.0.0",
+
+    # --- Database & Persistence ---
+    "sqlalchemy >= 2.0.0",
+    "psycopg2-binary >= 2.9.0",
+
+    # --- Frontend (New for ThreatScope) ---
+    "streamlit >= 1.35.0",
+
+    # --- Cybersecurity Tools ---
+    "python-nmap >= 0.7.1",
+]
+
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
