@@ -1,6 +1,11 @@
 # backend/Dockerfile
 FROM python:3.10-slim
 
+# Update package lists and install nmap
+RUN apt-get update && \
+    apt-get install -y nmap && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy the pyproject.toml from the root directory
