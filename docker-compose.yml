@@ -43,6 +43,36 @@ services:
       backend:
         condition: service_healthy # Waits for the backend to be fully up before starting
 
+  target:
+    image: tleemcjr/metasploitable2
+    container_name: threatscope_target
+    command: sh -c "/bin/services.sh && tail -f /dev/null"
+    # We deliberately DO NOT publish ports to the host machine here.
+    # We want it isolated so only containers inside this Docker network can reach it.
+    expose:
+      - "21"   # FTP
+      - "22"   # SSH
+      - "23"   # Telnet
+      - "25"   # SMTP
+      - "80"   # HTTP
+      - "111"  # RPC
+      - "139"  # NetBIOS
+      - "445"  # SMB
+      - "512"  # exec
+      - "513"  # login
+      - "514"  # shell
+      - "1099" # rmiregistry
+      - "1524" # ingreslock
+      - "2049" # nfs
+      - "2121" # ccproxy-ftp
+      - "3306" # MySQL
+      - "5432" # PostgreSQL
+      - "5900" # VNC
+      - "6000" # X11
+      - "6667" # IRC
+      - "8009" # AJP
+      - "8180" # Tomcat
+
   # We will add Postgres and ChromaDB here in the next step!
 volumes:
   postgres_data:
