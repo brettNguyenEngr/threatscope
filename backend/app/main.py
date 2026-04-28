@@ -1,6 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 import asyncio
+
+# --- Database Imports ---
+from app.db.database import engine, Base, get_db
+from app.db.models import ScanResult
+
+# This line now sees ScanResult and will actually build the 'scans' table!
+Base.metadata.create_all(bind=engine)
 
 # --- App Initialization ---
 app = FastAPI(title="ThreatScope Backend", version="0.1")
@@ -14,15 +22,14 @@ class ScanRequest(BaseModel):
 async def health_check():
     return {"status": "ok", "message": "ThreatScope Backend v0.1 is running."}
 
+# Notice we added 'db: Session = Depends(get_db)' here to open a database connection
 @app.post("/scan")
-async def run_scan(request: ScanRequest):
+async def run_scan(request: ScanRequest, db: Session = Depends(get_db)):
     """
     v0.1 Mock Endpoint: Simulates an agentic scan and returns dummy data.
     """
-    # 1. Simulate the delay of running tools and calling an LLM
     await asyncio.sleep(3)
     
-    # 2. Construct a dummy 'Manifest' (simulating raw Nmap/Vulners output)
     dummy_manifest = {
         "target": request.target_ip,
         "scan_type": "Simulated Agentic Multi-Pass",
@@ -33,7 +40,6 @@ async def run_scan(request: ScanRequest):
         ]
     }
     
-    # 3. Construct a dummy 'Verdict' (simulating the LLM's RAG-backed report)
     dummy_verdict = (
         f"### 🛡️ Agentic Security Verdict for `{request.target_ip}`\n\n"
         "**Summary:** The target host exposes multiple outdated services with critical known vulnerabilities.\n\n"
@@ -46,7 +52,15 @@ async def run_scan(request: ScanRequest):
         "*Note: This is v0.1 dummy data to test UI plumbing. The Nmap tools and LLM are not yet attached.*"
     )
     
-    # 4. Return the data payload to the Streamlit UI
+    # --- NEW: Save the fake scan to the Postgres Database ---
+    db_scan = ScanResult(
+        target_ip=request.target_ip,
+        manifest=dummy_manifest,
+        verdict=dummy_verdict
+    )
+    db.add(db_scan)
+    db.commit()
+    
     return {
         "manifest": dummy_manifest,
         "verdict": dummy_verdict
