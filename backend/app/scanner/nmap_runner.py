@@ -10,7 +10,8 @@ def execute_basic_scan(target_ip: str):
     # Arguments: 
     # -p 21,22,80 : Only scan FTP, SSH, and HTTP right now
     # -sV         : Probe open ports to determine service/version info
-    scan_args = '-p 21,22,80 -sV'
+    # --script vulners: Look for actual CVEs
+    scan_args = '-p 21,22,80 -sV --script vulners'
     
     # Run the scan
     nm.scan(hosts=target_ip, arguments=scan_args)
