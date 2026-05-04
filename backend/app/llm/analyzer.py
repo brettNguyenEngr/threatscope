@@ -28,7 +28,7 @@ def generate_verdict(manifest_data: dict) -> str:
     """
     
     payload = {
-        "model": "meta-llama/llama-3-8b-instruct:free", # Using a free tier model for testing
+        "model": os.getenv("OPENROUTER_MODEL"),
         "messages": [{"role": "user", "content": prompt}]
     }
 
