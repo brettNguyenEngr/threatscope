@@ -1,18 +1,21 @@
 from fastapi import FastAPI, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from app.scanner.nmap_runner import execute_basic_scan
 import asyncio
 
 # --- Database Imports ---
 from app.db.database import engine, Base, get_db
 from app.db.models import ScanResult
 
+# Scanner & LLM Imports
+from app.scanner.nmap_runner import execute_basic_scan
+from app.llm.analyzer import generate_verdict
+
 # This line now sees ScanResult and will actually build the 'scans' table!
 Base.metadata.create_all(bind=engine)
 
 # --- App Initialization ---
-app = FastAPI(title="ThreatScope Backend", version="0.1")
+app = FastAPI(title="ThreatScope Backend", version="0.3")
 
 # --- Pydantic Models ---
 class ScanRequest(BaseModel):
@@ -21,13 +24,13 @@ class ScanRequest(BaseModel):
 # --- API Endpoints ---
 @app.get("/")
 async def health_check():
-    return {"status": "ok", "message": "ThreatScope Backend v0.1 is running."}
+    return {"status": "ok", "message": "ThreatScope Backend v0.3 is running."}
 
 # Notice we added 'db: Session = Depends(get_db)' here to open a database connection
 @app.post("/scan")
 async def run_scan(request: ScanRequest, db: Session = Depends(get_db)):
     """
-    v0.2 Endpoint: Executes a REAL bvasic nmap scan against the target.
+    v0.3 Endpoint: Real nmap scan + llm verdict.
     """
 
     # Real scan
@@ -36,25 +39,22 @@ async def run_scan(request: ScanRequest, db: Session = Depends(get_db)):
     # Package into manifest format
     manifest = {
         "target": request.target_ip,
-        "scan_type": "Basic Nmap Version Scan",
+        "scan_type": "Nmap Version Scan & Vulners Scan",
         "raw_findings": real_scan_data
     }
     
-    dummy_verdict = (
-        f"### 🛡️ Agentic Security Verdict for `{request.target_ip}`\n\n"
-        "*Note: This is v0.1 dummy data to test UI plumbing. The Nmap tools and LLM are not yet attached.*"
-    )
+    real_verdict = generate_verdict(manifest)
     
     # --- Save to the Postgres Database ---
     db_scan = ScanResult(
         target_ip=request.target_ip,
         manifest=manifest,
-        verdict=dummy_verdict
+        verdict=real_verdict
     )
     db.add(db_scan)
     db.commit()
     
     return {
         "manifest": manifest,
-        "verdict": dummy_verdict
+        "verdict": real_verdict
     }
