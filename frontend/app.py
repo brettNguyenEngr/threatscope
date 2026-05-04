@@ -8,11 +8,11 @@ import time
 # We use localhost for fallback if running outside Docker.
 BACKEND_URL = "http://backend:8000" 
 
-st.set_page_config(page_title="ThreatScope v0.1", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="ThreatScope v0.2", page_icon="🛡️", layout="wide")
 
 # --- UI Header ---
 st.title("🛡️ ThreatScope")
-st.markdown("**Iteration v0.1: Walking Skeleton** - *Read-Only Observability Scanner*")
+st.markdown("**Iteration v0.2: Basic Scanner** - *Read-Only Observability Scanner*")
 st.divider()
 
 # --- Sidebar ---
@@ -42,11 +42,11 @@ if run_scan:
         status_text.text(f"Connecting to orchestrator at {BACKEND_URL}...")
         
         try:
-            # Attempt to hit the dummy backend endpoint
+            # Attempt to hit the backend endpoint
             response = requests.post(
                 f"{BACKEND_URL}/scan", 
                 json={"target_ip": target_ip},
-                timeout=5
+                timeout=120
             )
             response.raise_for_status()
             

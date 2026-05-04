@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from app.scanner.nmap_runner import execute_basic_scan
 import asyncio
 
 # --- Database Imports ---
@@ -26,42 +27,34 @@ async def health_check():
 @app.post("/scan")
 async def run_scan(request: ScanRequest, db: Session = Depends(get_db)):
     """
-    v0.1 Mock Endpoint: Simulates an agentic scan and returns dummy data.
+    v0.2 Endpoint: Executes a REAL bvasic nmap scan against the target.
     """
-    await asyncio.sleep(3)
-    
-    dummy_manifest = {
+
+    # Real scan
+    real_scan_data = execute_basic_scan(request.target_ip)
+
+    # Package into manifest format
+    manifest = {
         "target": request.target_ip,
-        "scan_type": "Simulated Agentic Multi-Pass",
-        "simulated_tools_used": ["nmap -sn", "nmap -sV --script vulners"],
-        "raw_findings": [
-            {"port": 21, "service": "ftp", "version": "vsftpd 2.3.4", "cves": ["CVE-2011-2523"]},
-            {"port": 80, "service": "http", "version": "Apache httpd 2.2.8", "cves": ["CVE-2011-3192", "CVE-2009-3555"]}
-        ]
+        "scan_type": "Basic Nmap Version Scan",
+        "raw_findings": real_scan_data
     }
     
     dummy_verdict = (
         f"### 🛡️ Agentic Security Verdict for `{request.target_ip}`\n\n"
-        "**Summary:** The target host exposes multiple outdated services with critical known vulnerabilities.\n\n"
-        "**Key Findings:**\n"
-        "* **Port 21 (FTP):** The host is running `vsftpd 2.3.4`, which contains a well-known malicious backdoor (CVE-2011-2523). "
-        "An attacker can trigger this by simply appending a smiley face `:)` to the FTP username, opening a root shell.\n"
-        "* **Port 80 (HTTP):** The host is running an ancient version of `Apache 2.2.8`. It is vulnerable to remote code execution "
-        "and denial of service attacks.\n\n"
-        "---\n"
         "*Note: This is v0.1 dummy data to test UI plumbing. The Nmap tools and LLM are not yet attached.*"
     )
     
-    # --- NEW: Save the fake scan to the Postgres Database ---
+    # --- Save to the Postgres Database ---
     db_scan = ScanResult(
         target_ip=request.target_ip,
-        manifest=dummy_manifest,
+        manifest=manifest,
         verdict=dummy_verdict
     )
     db.add(db_scan)
     db.commit()
     
     return {
-        "manifest": dummy_manifest,
+        "manifest": manifest,
         "verdict": dummy_verdict
     }
