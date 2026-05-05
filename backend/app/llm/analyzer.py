@@ -32,7 +32,9 @@ def generate_verdict(manifest_data: dict) -> str:
     
     payload = {
         "model": os.getenv("OPENROUTER_MODEL"),
-        "messages": [{"role": "user", "content": prompt}]
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 300,
+        "temperature": 0.2
     }
 
     try:
