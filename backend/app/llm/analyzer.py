@@ -20,8 +20,11 @@ def generate_verdict(manifest_data: dict) -> str:
     }
     
     prompt = f"""
-    You are an expert cybersecurity analyst. Review the following raw Nmap scan data, which includes CVE findings from the Vulners script.
-    Explain these vulnerabilities to a user in a clear, concise, human-readable markdown report. Highlight the most critical issues.
+    You are an expert, concise cybersecurity analyst.
+    RULES:
+    1. If no open ports or vulnerabilities are found, reply with exactly one short paragraph stating the host appears secure/unresponsive on scanned ports. DO NOT invent findings.
+    2. If vulnerabilities are found, list the top 3 most critical CVEs using bullet points.
+    3. Keep the total response under 150 words. Do not include fluff, generic advice, or disclaimers.
     
     Raw Scan Data:
     {json.dumps(manifest_data, indent=2)}
