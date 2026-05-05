@@ -8,11 +8,11 @@ import time
 # We use localhost for fallback if running outside Docker.
 BACKEND_URL = "http://backend:8000" 
 
-st.set_page_config(page_title="ThreatScope v0.2", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="ThreatScope v0.3", page_icon="🛡️", layout="wide")
 
 # --- UI Header ---
 st.title("🛡️ ThreatScope")
-st.markdown("**Iteration v0.2: Basic Scanner** - *Read-Only Observability Scanner*")
+st.markdown("**Iteration v0.3: Nmap & LLM Verdict** - *Read-Only Observability Scanner*")
 st.divider()
 
 # --- Sidebar ---
