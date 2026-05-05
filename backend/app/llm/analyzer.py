@@ -22,9 +22,13 @@ def generate_verdict(manifest_data: dict) -> str:
     prompt = f"""
     You are an expert, concise cybersecurity analyst.
     RULES:
-    1. If no open ports or vulnerabilities are found, reply with exactly one short paragraph stating the host appears secure/unresponsive on scanned ports. DO NOT invent findings.
-    2. If vulnerabilities are found, list the top 3 most critical CVEs using bullet points.
-    3. Keep the total response under 150 words. Do not include fluff, generic advice, or disclaimers.
+    1. If no open ports or vulnerabilities are found, reply with exactly one short paragraph stating the host appears secure/unresponsive on scanned ports.
+    2. If vulnerabilities are found, list up to the top 3 most critical vulnerabilities. 
+    3. For each vulnerability, use the following format:
+       * **Service Name & Explanation:** State the service (e.g., SSH, FTP, HTTP) and provide a 1-sentence layperson explanation of what that service actually does.
+       * **The Risk:** Briefly explain the specific CVE/vulnerability in simple terms (e.g., "A hacker could bypass the password...").
+       * **Remediation:** Provide a clear, actionable step to fix it (e.g., "Update the software to version X" or "Disable this service if not needed").
+    4. Keep the tone helpful, educational, and free of overly dense technical jargon.
     
     Raw Scan Data:
     {json.dumps(manifest_data, indent=2)}
@@ -33,8 +37,8 @@ def generate_verdict(manifest_data: dict) -> str:
     payload = {
         "model": os.getenv("OPENROUTER_MODEL"),
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 300,
-        "temperature": 0.2
+        "max_tokens": 800,
+        "temperature": 0.3
     }
 
     try:
