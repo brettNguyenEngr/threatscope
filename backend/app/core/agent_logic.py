@@ -1,7 +1,8 @@
 import os
 import json
 import requests
-from typing import Dict, Any
+from typing import Dict, Any, Generator
+from datetime import datetime
 
 from app.scanner.nmap_runner import tool_ping_sweep, tool_port_scan, tool_vulners_scan
 from app.core.rag_engine import fetch_cve_details
@@ -18,6 +19,7 @@ AVAILABLE_TOOLS = {
 SYSTEM_PROMPT = """
 You are ThreatScope, an autonomous cybersecurity agent. 
 Your goal is to investigate a target network or IP, identify vulnerabilities, lookup CVE details, and write a final report.
+If you find a large number of vulnerabilities (e.g., on Port 22), group them by severity and include at least the top 5 most critical in your summary.
 
 You have access to the following tools:
 1. `ping_sweep` - Arguments: {"target_subnet": "string"} (Finds active IPs)
@@ -42,25 +44,26 @@ FORMAT 2 - TO FINISH THE INVESTIGATION:
 }
 """
 
-def run_agentic_loop(target: str) -> str:
+def run_agentic_loop(target: str) -> Generator[Dict[str, str], None, None]:
     """
-    The main engine. This loops up to 10 times, letting the LLM choose tools 
-    and feeding the observations back to it until it issues a 'final_answer'.
+    The main engine. This is now a generator that yields events as dictionaries
+    so the frontend can stream the agent's thought process.
     """
+    current_date = datetime.now().strftime("%Y-%m-%d")
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Begin your investigation on the target: {target}"}
+        {"role": "user", "content": f"Today's date is {current_date}. Begin your investigation on the target: {target}"}
     ]
     
     api_key = os.getenv("OPENROUTER_API_KEY")
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     
-    print(f"\n🚀 --- AGENT SPAWNED FOR TARGET: {target} ---")
+    yield {"type": "log", "content": f"🚀 --- AGENT SPAWNED FOR TARGET: {target} ---"}
     
     max_steps = 10
     for step in range(max_steps):
-        print(f"\n🧠 [Step {step+1}] Agent is thinking...")
+        yield {"type": "log", "content": f"\n🧠 [Step {step+1}] Agent is thinking..."}
         
         payload = {
             "model": os.getenv("OPENROUTER_MODEL"),
@@ -71,7 +74,8 @@ def run_agentic_loop(target: str) -> str:
         try:
             response = requests.post(url, headers=headers, json=payload).json()
         except Exception as e:
-            return f"Error contacting LLM API: {e}"
+            yield {"type": "error", "content": f"Error contacting LLM API: {e}"}
+            return
         
         raw_content = ""
         try:
@@ -88,46 +92,52 @@ def run_agentic_loop(target: str) -> str:
             agent_decision = json.loads(raw_content)
             
         except KeyError:
-            print(f"⚠️ Unexpected API Response: {response}")
+            yield {"type": "error", "content": f"⚠️ Unexpected API Response: {response}"}
             break
         except json.JSONDecodeError as e:
-            print(f"⚠️ Agent generated invalid JSON.\nRaw: {raw_content}\nError: {e}")
-            break
-            
-        print(f"💭 Thought: {agent_decision.get('thought', 'No thought provided')}")
+            # Fallback handler for raw markdown reports
+            if "# ThreatScope" in raw_content or "Executive Summary" in raw_content or "**Target:**" in raw_content:
+                yield {"type": "log", "content": "🛡️ Fallback triggered: Agent forgot JSON formatting, but provided a report. Gracefully accepting."}
+                agent_decision = {"final_answer": raw_content}
+            else:
+                yield {"type": "error", "content": f"⚠️ Agent generated invalid JSON.\nRaw: {raw_content}\nError: {e}"}
+                break
+                
+        yield {"type": "log", "content": f"💭 Thought: {agent_decision.get('thought', 'No thought provided')}"}
         
         # 2. Check if the Agent is done
         if "final_answer" in agent_decision:
-            print("✅ Agent reached a conclusion!")
-            return agent_decision["final_answer"]
+            yield {"type": "log", "content": "✅ Agent reached a conclusion!"}
+            yield {"type": "final_answer", "content": agent_decision["final_answer"]}
+            return
             
         # 3. The Agent wants to use a tool
         tool_name = agent_decision.get("tool")
         tool_args = agent_decision.get("arguments", {})
         
         if tool_name in AVAILABLE_TOOLS:
-            print(f"🛠️  Action: Executing `{tool_name}` with args {tool_args}...")
+            yield {"type": "log", "content": f"🛠️  Action: Executing `{tool_name}` with args {tool_args}..."}
             
             tool_function = AVAILABLE_TOOLS[tool_name]
             try:
                 # Type safety check before unpacking kwargs
                 if not isinstance(tool_args, dict):
-                    print("⚠️ Warning: Agent provided non-dictionary arguments. Coercing to empty dict.")
+                    yield {"type": "log", "content": "⚠️ Warning: Agent provided non-dictionary arguments. Coercing to empty dict."}
                     tool_args = {}
                     
                 observation = tool_function(**tool_args)
             except Exception as e:
                 observation = f"Error executing tool: {str(e)}"
                 
-            print(f"👁️  Observation: {observation}")
+            yield {"type": "log", "content": f"👁️  Observation: {observation}"}
             
             # 4. Feed the observation back to the Agent's memory
             messages.append({"role": "assistant", "content": raw_content})
             messages.append({"role": "user", "content": f"Observation: {observation}"})
             
         else:
-            print(f"⚠️ Agent tried to use a non-existent tool: {tool_name}")
+            yield {"type": "error", "content": f"⚠️ Agent tried to use a non-existent tool: {tool_name}"}
             messages.append({"role": "assistant", "content": raw_content})
             messages.append({"role": "user", "content": f"Observation: Tool '{tool_name}' does not exist. Please use a valid tool."})
 
-    return "Agent terminated: Exceeded maximum steps without reaching a final answer."
+    yield {"type": "error", "content": "Agent terminated: Exceeded maximum steps without reaching a final answer."}
