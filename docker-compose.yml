@@ -27,6 +27,9 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/threatscope
+      - CHROMA_PERSIST_DIRECTORY=/app/chroma_data
+    volumes:
+      - chroma_data:/app/chroma_data
     depends_on:
       db:
         condition: service_healthy
@@ -80,3 +83,4 @@ services:
   # We will add Postgres and ChromaDB here in the next step!
 volumes:
   postgres_data:
+  chroma_data:
