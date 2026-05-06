@@ -1,6 +1,6 @@
 import os
 import requests
-from db.vector_store import get_collection # Adjust import path based on your structure
+from app.db.vector_store import get_collection # Adjust import path based on your structure
 
 VULNERS_API_KEY = os.getenv("VULNERS_API_KEY")
 VULNERS_BASE_URL = "https://vulners.com/api/v3/search/id"
@@ -28,16 +28,22 @@ def fetch_cve_details(cve_id: str) -> str:
         "X-Api-Key": VULNERS_API_KEY,
         "Content-Type": "application/json"
     }
-    payload = {"id": cve_id}
+    payload = {"id": [cve_id]}
     
     try:
         response = requests.post(VULNERS_BASE_URL, headers=headers, json=payload, timeout=10)
         response.raise_for_status()
         data = response.json()
+
+        if data.get("result") == "error":
+            error_msg = data.get("data", {}).get("error", "Unknown API Error")
+            print(f"[RAG Engine] 🚨 Vulners API Error: {error_msg}")
+            return f"Vulners API Error: {error_msg}"
         
         # Parse the description from the Vulners response
         documents = data.get("data", {}).get("documents", {})
         if not documents or cve_id not in documents:
+            print(f"[RAG Engine] ⚠️ No documents returned. Raw Vulners Response: {data}")
             return f"No detailed description found for {cve_id} via Vulners API."
             
         cve_data = documents[cve_id]
