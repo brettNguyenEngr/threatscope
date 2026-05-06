@@ -1,13 +1,16 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import asyncio
-from app.core.rag_engine import fetch_cve_details
 
-# --- Database Imports ---
+# Database Imports
 from app.db.database import engine, Base, get_db
 from app.db.models import ScanResult
 
+# Core Logic Imports
+from app.core.rag_engine import fetch_cve_details
+from app.core.agent_logic import run_agentic_loop
 # Scanner & LLM Imports
 from app.scanner.nmap_runner import execute_basic_scan
 from app.llm.analyzer import generate_verdict
