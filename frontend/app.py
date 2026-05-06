@@ -1,18 +1,16 @@
 import streamlit as st
 import requests
 import json
-import time
 
 # --- Config & Constants ---
 # In Docker, 'backend' will resolve to the FastAPI container. 
-# We use localhost for fallback if running outside Docker.
 BACKEND_URL = "http://backend:8000" 
 
 st.set_page_config(page_title="ThreatScope v0.4", page_icon="🛡️", layout="wide")
 
 # --- UI Header ---
 st.title("🛡️ ThreatScope")
-st.markdown("**Iteration v0.4: Agentic ReAct Loop & RAG** - *Read-Only Observability Scanner*")
+st.markdown("**Iteration v0.4: Agentic ReAct Loop & RAG** - *Live Streaming Agent*")
 st.divider()
 
 # --- Sidebar ---
@@ -31,51 +29,47 @@ if run_scan:
     else:
         st.info(f"Initiating agentic scan protocol for {target_ip}...")
         
-        # UI placeholder for the agent's "thought process"
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+        # 1. Create UI elements to hold our streaming data
+        terminal_expander = st.expander("Terminal Logs (Live Agent Thinking)", expanded=True)
+        log_placeholder = terminal_expander.empty()
         
-        # Simulate initial agent warmup (UX trick)
-        status_text.text("Agent is waking up and evaluating target...")
-        time.sleep(1)
-        progress_bar.progress(30)
-        status_text.text(f"Connecting to orchestrator at {BACKEND_URL}. Please wait (this may take 2-3 minutes)...")
+        # Container for the final report to appear below the terminal
+        report_container = st.container()
+        
+        terminal_text = ""
         
         try:
-            # Attempt to hit the backend endpoint
-            # Timeout increased to 5 minutes to allow the agent's ReAct loop to finish
-            response = requests.post(
-                f"{BACKEND_URL}/scan", 
-                json={"target_ip": target_ip},
-                timeout=300
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            progress_bar.progress(100)
-            status_text.text("Investigation complete.")
-            
-            # --- Display Results ---
-            st.success("✅ Agent successfully reached a verdict!")
-            
-            st.subheader("📝 Final Security Report")
-            st.markdown("---")
-            # The v0.4 backend returns the final markdown in the 'report' key
-            st.markdown(data.get("report", "No report was generated."))
-            st.markdown("---")
-
+            # 2. Open a streaming connection to the backend
+            # Note the stream=True parameter! This keeps the connection open.
+            with requests.post(f"{BACKEND_URL}/scan", json={"target_ip": target_ip}, stream=True, timeout=300) as response:
+                response.raise_for_status()
+                
+                # 3. Iterate over the NDJSON lines as they arrive from FastAPI
+                for line in response.iter_lines():
+                    if line:
+                        # Decode the bytes into a string, then parse the JSON
+                        data = json.loads(line.decode('utf-8'))
+                        event_type = data.get("type")
+                        content = data.get("content", "")
+                        
+                        if event_type == "final_answer":
+                            st.success("✅ Agent successfully reached a verdict!")
+                            report_container.subheader("📝 Final Security Report")
+                            report_container.markdown("---")
+                            report_container.markdown(content)
+                            report_container.markdown("---")
+                        else:
+                            # For logs and errors, append the text to our "terminal" string
+                            terminal_text += content + "\n"
+                            # Re-render the markdown block with the updated text
+                            log_placeholder.markdown(f"```text\n{terminal_text}\n```")
+                            
         except requests.exceptions.Timeout:
-            progress_bar.empty()
-            status_text.empty()
-            st.error("⏳ **Timeout:** The agent took too long to respond. Check the backend Docker logs to see if it is still running.")
+            st.error("⏳ **Timeout:** The agent took too long to respond. Check the backend Docker logs.")
             
         except requests.exceptions.ConnectionError:
-            progress_bar.empty()
-            status_text.empty()
             st.error(f"🚨 **Connection Error:** Could not reach the backend at `{BACKEND_URL}`.")
             st.code("Hint: Is the FastAPI container running and mapped to port 8000?", language="markdown")
             
         except Exception as e:
-            progress_bar.empty()
-            status_text.empty()
             st.error(f"An unexpected error occurred: {e}")
