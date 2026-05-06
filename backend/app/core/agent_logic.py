@@ -56,6 +56,18 @@ FORMAT 2 - TO FINISH THE INVESTIGATION:
 }
 """
 
+def extract_fallback_report(raw_text: str) -> str:
+    """Helper to extract the markdown report from broken JSON."""
+    if '"final_answer":' in raw_text:
+        parts = raw_text.split('"final_answer":')
+        report = parts[1].strip()
+        # Clean up leading/trailing quotes, spaces, and braces
+        report = report.strip(' "}\n')
+        # Fix any escaped newlines that might be left over
+        report = report.replace('\\n', '\n')
+        return report
+    return raw_text
+
 def run_agentic_loop(target: str) -> Generator[Dict[str, str], None, None]:
     """
     The main engine. This is now a generator that yields events as dictionaries
@@ -181,9 +193,15 @@ def run_agentic_loop(target: str) -> Generator[Dict[str, str], None, None]:
         try:
             agent_decision = json.loads(raw_content)
             final_report = agent_decision.get("final_answer", raw_content)
-        except json.JSONDecodeError:
-            # If it still messes up the JSON, just use the raw text as the report
-            final_report = raw_content
+        except json.JSONDecodeError as e:
+            # Fallback handler for raw markdown reports
+            if "# ThreatScope" in raw_content or "Executive Summary" in raw_content or "**Target:**" in raw_content or "final_answer" in raw_content:
+                yield {"type": "log", "content": "🛡️ Fallback triggered: Agent forgot JSON formatting. Extracting report..."}
+                extracted_report = extract_fallback_report(raw_content)
+                agent_decision = {"final_answer": extracted_report}
+            else:
+                yield {"type": "error", "content": f"⚠️ Agent generated invalid JSON.\nRaw: {raw_content}\nError: {e}"}
+                final_report = raw_content
             
         yield {"type": "log", "content": "✅ Agent successfully forced a conclusion!"}
         yield {"type": "final_answer", "content": final_report}
