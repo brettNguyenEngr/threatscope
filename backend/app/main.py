@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import asyncio
-from core.rag_engine import fetch_cve_details
+from app.core.rag_engine import fetch_cve_details
 
 # --- Database Imports ---
 from app.db.database import engine, Base, get_db
