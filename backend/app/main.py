@@ -37,7 +37,7 @@ class ScanRequest(BaseModel):
 # --- API Endpoints ---
 @app.get("/")
 async def health_check():
-    return {"status": "ok", "message": "ThreatScope Backend v0.3 is running."}
+    return {"status": "ok", "message": "ThreatScope Backend v0.4 is running."}
 
 # Notice we added 'db: Session = Depends(get_db)' here to open a database connection
 @app.post("/scan")
