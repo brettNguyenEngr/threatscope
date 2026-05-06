@@ -1,73 +1,59 @@
-import argparse
 import os
-import json
 import requests
-import chromadb
-from sentence_transformers import SentenceTransformer
-from dotenv import load_dotenv
+from db.vector_store import get_collection # Adjust import path based on your structure
 
-load_dotenv()
+VULNERS_API_KEY = os.getenv("VULNERS_API_KEY")
+VULNERS_BASE_URL = "https://vulners.com/api/v3/search/id"
 
-def call_llm(prompt):
-    url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1") + "/chat/completions"
+def fetch_cve_details(cve_id: str) -> str:
+    """
+    Checks ChromaDB for the CVE description.
+    If not found, fetches from Vulners API, saves to ChromaDB, and returns it.
+    """
+    collection = get_collection()
+    
+    # 1. Search Local Memory (ChromaDB)
+    results = collection.get(ids=[cve_id])
+    
+    if results and results.get('documents') and len(results['documents']) > 0:
+        print(f"[RAG Engine] 🟢 Cache hit for {cve_id}")
+        return results['documents'][0]
+        
+    # 2. Cache Miss: Fetch from external Vulners API
+    print(f"[RAG Engine] 🔴 Cache miss for {cve_id}. Fetching from Vulners API...")
+    if not VULNERS_API_KEY:
+        return f"Warning: {cve_id} not in DB and VULNERS_API_KEY is missing."
+
     headers = {
-        "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+        "X-Api-Key": VULNERS_API_KEY,
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": os.getenv("OPENROUTER_MODEL"),
-        "messages": [{"role": "user", "content": prompt}]
-    }
-    response = requests.post(url, headers=headers, json=payload)
-    response_json = response.json()
+    payload = {"id": cve_id}
     
-    # Check if the API returned an error instead of a normal response
-    if 'choices' not in response_json:
-        print(f"--- API ERROR ---\n{json.dumps(response_json, indent=2)}\n-----------------")
-        raise KeyError("Failed to get a valid response from OpenRouter. See the API Error above.")
+    try:
+        response = requests.post(VULNERS_BASE_URL, headers=headers, json=payload, timeout=10)
+        response.raise_for_status()
+        data = response.json()
         
-    return response_json['choices'][0]['message']['content']
+        # Parse the description from the Vulners response
+        documents = data.get("data", {}).get("documents", {})
+        if not documents or cve_id not in documents:
+            return f"No detailed description found for {cve_id} via Vulners API."
+            
+        cve_data = documents[cve_id]
+        description = cve_data.get("description", "No description available.")
+        cvss_score = cve_data.get("cvss", {}).get("score", "N/A")
+        
+        # 3. Save to ChromaDB for future scans
+        collection.add(
+            documents=[description],
+            metadatas=[{"source": "vulners", "cvss": str(cvss_score)}],
+            ids=[cve_id]
+        )
+        print(f"[RAG Engine] 💾 Saved {cve_id} to ChromaDB memory.")
+        
+        return description
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--task", required=True, choices=["summary", "risks"])
-    parser.add_argument("--filing_id", required=True)
-    parser.add_argument("--format", choices=["text", "json"], default="text")
-    args = parser.parse_args()
-
-    # Retrieve chunks
-    model = SentenceTransformer(os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
-    query_embedding = model.encode([f"What are the {args.task}?"]).tolist()
-
-    client = chromadb.PersistentClient(path="./ai_pipeline/vector_store")
-    collection = client.get_or_create_collection("sec_filings")
-    
-    results = collection.query(
-        query_embeddings=query_embedding,
-        n_results=int(os.getenv("RAG_TOP_K", 6)),
-        where={"filing_id": args.filing_id}
-    )
-
-    evidence_text = "\n\n".join(results['documents'][0])
-    evidence_list = [{"id": id, "text": doc} for id, doc in zip(results['ids'][0], results['documents'][0])]
-
-    # Load prompt
-    with open(f"ai_pipeline/prompts/{args.task}.md", "r") as f:
-        prompt_template = f.read()
-    
-    prompt = prompt_template.replace("{evidence}", evidence_text)
-    answer = call_llm(prompt)
-
-    if args.format == "json":
-        output = {
-            "task": args.task,
-            "filing_id": args.filing_id,
-            "answer": answer,
-            "evidence": evidence_list
-        }
-        print(json.dumps(output, indent=2))
-    else:
-        print(f"--- {args.task.upper()} ---\n{answer}\n\n--- EVIDENCE ---\n{evidence_text}")
-
-if __name__ == "__main__":
-    main()
+    except Exception as e:
+        print(f"[RAG Engine] ⚠️ Error fetching {cve_id}: {e}")
+        return f"Could not retrieve details for {cve_id}."
