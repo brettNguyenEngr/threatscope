@@ -21,6 +21,15 @@ Base.metadata.create_all(bind=engine)
 # --- App Initialization ---
 app = FastAPI(title="ThreatScope Backend", version="0.3")
 
+# Allow Streamlit to communicate with FastAPI (Required for the UI)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # --- Pydantic Models ---
 class ScanRequest(BaseModel):
     target_ip: str
