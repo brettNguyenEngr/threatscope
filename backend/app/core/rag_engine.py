@@ -42,11 +42,12 @@ def fetch_cve_details(cve_id: str) -> str:
         
         # Parse the description from the Vulners response
         documents = data.get("data", {}).get("documents", {})
-        if not documents or cve_id not in documents:
+        if not documents:
             print(f"[RAG Engine] ⚠️ No documents returned. Raw Vulners Response: {data}")
             return f"No detailed description found for {cve_id} via Vulners API."
-            
-        cve_data = documents[cve_id]
+
+        # Get the first (and only) document
+        cve_data = list(documents.values())[0]
         description = cve_data.get("description", "No description available.")
         cvss_score = cve_data.get("cvss", {}).get("score", "N/A")
         
