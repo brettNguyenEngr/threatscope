@@ -49,7 +49,9 @@ def fetch_cve_details(cve_id: str) -> str:
         # Get the first (and only) document
         cve_data = list(documents.values())[0]
         description = cve_data.get("description", "No description available.")
-        cvss_score = cve_data.get("cvss", {}).get("score", "N/A")
+        cvss_score = cve_data.get("cvss", {}).get("score")
+        if not cvss_score or cvss_score == 0.0:
+            cvss_score = cve_data.get("vulnerScore", "N/A")
         
         # 3. Save to ChromaDB for future scans
         collection.add(
