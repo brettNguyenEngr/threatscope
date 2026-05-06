@@ -44,32 +44,41 @@ async def run_scan(request: ScanRequest, db: Session = Depends(get_db)):
     """
     v0.4 Endpoint: Autonomous Agentic ReAct Loop + Database Logging.
     """
+    target = request.target_ip
+    if not target:
+        raise HTTPException(status_code=400, detail="Target IP or subnet is required.")
 
-    # Real scan
-    real_scan_data = execute_basic_scan(request.target_ip)
+    print(f"--- Received agentic scan request for target: {target} ---")
 
-    # Package into manifest format
-    manifest = {
-        "target": request.target_ip,
-        "scan_type": "Nmap Version Scan & Vulners Scan",
-        "raw_findings": real_scan_data
-    }
-    
-    real_verdict = generate_verdict(manifest)
-    
-    # --- Save to the Postgres Database ---
-    db_scan = ScanResult(
-        target_ip=request.target_ip,
-        manifest=manifest,
-        verdict=real_verdict
-    )
-    db.add(db_scan)
-    db.commit()
-    
-    return {
-        "manifest": manifest,
-        "verdict": real_verdict
-    }
+    try:
+        # Trigger autonomous Agentic loop instead of linear v0.3 scan
+        final_report = run_agentic_loop(target)
+
+        # Because agent decides what to scan dynamically, we don't have a single
+        # linear 'manifest' like in v0.3. Log context of agent run instead.
+        manifest = {
+            "target": target,
+            "scan_type": "Agentic ReAct Loop"
+        }
+
+        # --- Save to the Postgres Database ---
+        db_scan = ScanResult(
+            target_ip=request.target_ip,
+            manifest=manifest,
+            verdict=final_report
+        )
+        db.add(db_scan)
+        db.commit()
+        
+        return {
+            "status": "Success",
+            "target": target,
+            "report": final_report
+        }
+
+    except Exception as e:
+        print(f"Backend Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/test-rag/{cve_id}")
 async def test_rag(cve_id: str):
