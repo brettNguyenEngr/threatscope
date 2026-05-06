@@ -11,9 +11,6 @@ from app.db.models import ScanResult
 # Core Logic Imports
 from app.core.rag_engine import fetch_cve_details
 from app.core.agent_logic import run_agentic_loop
-# Scanner & LLM Imports
-from app.scanner.nmap_runner import execute_basic_scan
-from app.llm.analyzer import generate_verdict
 
 # This line now sees ScanResult and will actually build the 'scans' table!
 Base.metadata.create_all(bind=engine)
