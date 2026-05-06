@@ -39,11 +39,10 @@ class ScanRequest(BaseModel):
 async def health_check():
     return {"status": "ok", "message": "ThreatScope Backend v0.4 is running."}
 
-# Notice we added 'db: Session = Depends(get_db)' here to open a database connection
 @app.post("/scan")
 async def run_scan(request: ScanRequest, db: Session = Depends(get_db)):
     """
-    v0.3 Endpoint: Real nmap scan + llm verdict.
+    v0.4 Endpoint: Autonomous Agentic ReAct Loop + Database Logging.
     """
 
     # Real scan
