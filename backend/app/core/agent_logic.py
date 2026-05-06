@@ -19,7 +19,10 @@ AVAILABLE_TOOLS = {
 SYSTEM_PROMPT = """
 You are ThreatScope, an autonomous cybersecurity agent. 
 Your goal is to investigate a target network or IP, identify vulnerabilities, lookup CVE details, and write a final report.
-If you find a large number of vulnerabilities (e.g., on Port 22), group them by severity and include at least the top 5 most critical in your summary.
+
+CRITICAL RULES OF ENGAGEMENT:
+1. You are lazy if you just dump CVE IDs. You MUST use the `fetch_cve` tool to look up the specific descriptions for the top 3 most critical vulnerabilities for EACH open port BEFORE writing your final report.
+2. Do NOT write your final report until you have successfully executed `fetch_cve` on the most dangerous looking CVEs.
 
 You have access to the following tools:
 1. `ping_sweep` - Arguments: {"target_subnet": "string"} (Finds active IPs)
@@ -28,18 +31,27 @@ You have access to the following tools:
 4. `fetch_cve` - Arguments: {"cve_id": "string"} (Looks up the English description of a CVE ID)
 
 You operate in a loop of Thought, Action, Observation.
-You MUST respond with a SINGLE valid JSON object at every step. Do not add conversational text outside the JSON.
+You MUST respond with a SINGLE valid JSON object at every step.
+
+When you are finished gathering data, use FORMAT 2. Your markdown report MUST follow this exact structure:
+### Executive Summary
+(A brief summary of the total number of vulnerabilities found)
+
+### Port Analysis
+(For EACH open port, provide:)
+* **Service Description:** (1-2 sentences explaining what the service listening on this port is and why its security matters)
+* **Top Vulnerabilities:** (List ONLY the top 3 most critical vulnerabilities found for this port. You MUST include the text description of the CVE you retrieved using the `fetch_cve` tool).
 
 FORMAT 1 - TO TAKE AN ACTION:
 {
-    "thought": "I need to see what ports are open on 172.18.0.2.",
-    "tool": "port_scan",
-    "arguments": {"target_ip": "172.18.0.2"}
+    "thought": "I need to look up the details for CVE-2011-2523.",
+    "tool": "fetch_cve",
+    "arguments": {"cve_id": "CVE-2011-2523"}
 }
 
 FORMAT 2 - TO FINISH THE INVESTIGATION:
 {
-    "thought": "I have gathered all necessary information.",
+    "thought": "I have looked up the details for the top CVEs and am ready to write the report.",
     "final_answer": "# ThreatScope Security Report \\n\\n (Your human-readable markdown report goes here)"
 }
 """
@@ -140,4 +152,41 @@ def run_agentic_loop(target: str) -> Generator[Dict[str, str], None, None]:
             messages.append({"role": "assistant", "content": raw_content})
             messages.append({"role": "user", "content": f"Observation: Tool '{tool_name}' does not exist. Please use a valid tool."})
 
-    yield {"type": "error", "content": "Agent terminated: Exceeded maximum steps without reaching a final answer."}
+    yield {"type": "log", "content": "⚠️ Maximum steps reached. Forcing the agent to compile a final report with available data..."}
+    
+    # Inject a strict system override into the agent's memory
+    messages.append({
+        "role": "user", 
+        "content": "SYSTEM OVERRIDE: You have reached the maximum allowed actions. You MUST immediately reply with a JSON object containing your 'final_answer' formatted as a markdown security report summarizing all findings so far. Do not use any more tools."
+    })
+    
+    payload = {
+        "model": os.getenv("OPENROUTER_MODEL"),
+        "messages": messages,
+        "temperature": 0.1
+    }
+    
+    try:
+        # Make one final API call
+        response = requests.post(url, headers=headers, json=payload).json()
+        raw_content = response['choices'][0]['message']['content'].strip()
+        
+        # Clean markdown formatting if present
+        if raw_content.startswith("```json"): 
+            raw_content = raw_content[7:]
+        if raw_content.endswith("```"): 
+            raw_content = raw_content[:-3]
+        raw_content = raw_content.strip()
+        
+        try:
+            agent_decision = json.loads(raw_content)
+            final_report = agent_decision.get("final_answer", raw_content)
+        except json.JSONDecodeError:
+            # If it still messes up the JSON, just use the raw text as the report
+            final_report = raw_content
+            
+        yield {"type": "log", "content": "✅ Agent successfully forced a conclusion!"}
+        yield {"type": "final_answer", "content": final_report}
+        
+    except Exception as e:
+        yield {"type": "error", "content": f"Agent failed to generate forced final report: {e}"}
