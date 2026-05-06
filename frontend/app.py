@@ -10,7 +10,7 @@ st.set_page_config(page_title="ThreatScope v0.4", page_icon="🛡️", layout="w
 
 # --- UI Header ---
 st.title("🛡️ ThreatScope")
-st.markdown("**Iteration v0.4: Agentic ReAct Loop & RAG** - *Live Streaming Agent*")
+st.markdown("**Iteration v0.4: Agentic ReAct Loop & RAG** - *Real-Time Agent Thinking*")
 st.divider()
 
 # --- Sidebar ---
