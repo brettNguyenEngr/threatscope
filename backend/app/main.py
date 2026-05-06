@@ -1,8 +1,9 @@
+import json
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-import asyncio
 
 # Database Imports
 from app.db.database import engine, Base, get_db
@@ -16,7 +17,7 @@ from app.core.agent_logic import run_agentic_loop
 Base.metadata.create_all(bind=engine)
 
 # --- App Initialization ---
-app = FastAPI(title="ThreatScope Backend", version="0.3")
+app = FastAPI(title="ThreatScope Backend", version="0.4")
 
 # Allow Streamlit to communicate with FastAPI (Required for the UI)
 app.add_middleware(
@@ -34,48 +35,52 @@ class ScanRequest(BaseModel):
 # --- API Endpoints ---
 @app.get("/")
 async def health_check():
-    return {"status": "ok", "message": "ThreatScope Backend v0.4 is running."}
+    return {"status": "ok", "message": "ThreatScope Backend v0.4 is running (Streaming Mode)."}
 
 @app.post("/scan")
 async def run_scan(request: ScanRequest, db: Session = Depends(get_db)):
     """
-    v0.4 Endpoint: Autonomous Agentic ReAct Loop + Database Logging.
+    v0.4 Endpoint: Streams the ReAct loop directly to the UI via NDJSON.
     """
     target = request.target_ip
     if not target:
         raise HTTPException(status_code=400, detail="Target IP or subnet is required.")
 
-    print(f"--- Received agentic scan request for target: {target} ---")
+    print(f"--- Received agentic scan stream request for target: {target} ---")
 
-    try:
-        # Trigger autonomous Agentic loop instead of linear v0.3 scan
-        final_report = run_agentic_loop(target)
+    def event_stream():
+        final_report = ""
+        try:
+            # Iterate over the yielded events from the agent generator
+            for event in run_agentic_loop(target):
+                # Catch the final answer so we can save it to the DB later
+                if event.get("type") == "final_answer":
+                    final_report = event.get("content", "")
+                
+                # Yield the dictionary as a Newline-Delimited JSON (NDJSON) string
+                yield json.dumps(event) + "\n"
+            
+            # After the loop finishes successfully, save to Postgres!
+            if final_report:
+                manifest = {
+                    "target": target,
+                    "scan_type": "Agentic ReAct Loop"
+                }
+                db_scan = ScanResult(
+                    target_ip=target,
+                    manifest=manifest,
+                    verdict=final_report
+                )
+                db.add(db_scan)
+                db.commit()
+                print(f"✅ Successfully saved scan for {target} to database.")
+                
+        except Exception as e:
+            print(f"Backend Streaming Error: {e}")
+            yield json.dumps({"type": "error", "content": str(e)}) + "\n"
 
-        # Because agent decides what to scan dynamically, we don't have a single
-        # linear 'manifest' like in v0.3. Log context of agent run instead.
-        manifest = {
-            "target": target,
-            "scan_type": "Agentic ReAct Loop"
-        }
-
-        # --- Save to the Postgres Database ---
-        db_scan = ScanResult(
-            target_ip=request.target_ip,
-            manifest=manifest,
-            verdict=final_report
-        )
-        db.add(db_scan)
-        db.commit()
-        
-        return {
-            "status": "Success",
-            "target": target,
-            "report": final_report
-        }
-
-    except Exception as e:
-        print(f"Backend Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    # Return the generator wrapped in a StreamingResponse
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 @app.get("/test-rag/{cve_id}")
 async def test_rag(cve_id: str):
