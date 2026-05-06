@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import asyncio
+from core.rag_engine import fetch_cve_details
 
 # --- Database Imports ---
 from app.db.database import engine, Base, get_db
@@ -58,3 +59,8 @@ async def run_scan(request: ScanRequest, db: Session = Depends(get_db)):
         "manifest": manifest,
         "verdict": real_verdict
     }
+
+@app.get("/test-rag/{cve_id}")
+async def test_rag(cve_id: str):
+    description = fetch_cve_details(cve_id)
+    return {"cve_id": cve_id, "description": description}
