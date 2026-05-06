@@ -28,6 +28,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/threatscope
       - CHROMA_PERSIST_DIRECTORY=/app/chroma_data
+      - VULNERS_API_KEY=${VULNERS_API_KEY}
     volumes:
       - chroma_data:/app/chroma_data
     depends_on:
