@@ -2,6 +2,7 @@ import nmap
 import json
 import re
 import socket
+import ipaddress
 
 def tool_ping_sweep(target_subnet: str) -> str:
     """
@@ -21,6 +22,16 @@ def tool_ping_sweep(target_subnet: str) -> str:
         except socket.gaierror:
             # If a container isn't running or the name is slightly off, skip it safely
             pass
+
+    try:
+        # This safely parses "172.18.0.0/24" and finds the first usable IP "172.18.0.1"
+        network = ipaddress.IPv4Network(target_subnet, strict=False)
+        gateway_ip = str(network[1]) 
+        if gateway_ip not in excluded_ips:
+            excluded_ips.append(gateway_ip)
+    except ValueError:
+        # If the user typed a single IP instead of a subnet, just ignore this step
+        pass
             
     # 3. Build the Nmap arguments
     nmap_args = '-sn'
@@ -90,7 +101,7 @@ def tool_vulners_scan(target_ip: str, port_list: list) -> str:
                      if cves:
                          found_cves.append({
                              "port": port,
-                             "cves": cves
+                             "cves": cves[:10]
                          })
                          
     return json.dumps({"action": "vulners_scan", "target": target_ip, "vulnerabilities": found_cves})
