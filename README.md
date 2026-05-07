@@ -24,7 +24,7 @@ Design intent: **“Investigate, don’t fix.”** ThreatScope is built as a *re
 
 ## **Project Demo (Video)**
 
-[![Watch the ThreatScope Demo](https://img.youtube.com/vi/fKEm7xLDY-c /0.jpg)](https://www.youtube.com/watch?v=fKEm7xLDY-c )
+[![Watch the ThreatScope Demo](https://img.youtube.com/vi/fKEm7xLDY-c/0.jpg)](https://www.youtube.com/watch?v=fKEm7xLDY-c)
 
 > 💡 **Tip:** Click the image above to watch the full 5-minute technical walkthrough on YouTube.
 
