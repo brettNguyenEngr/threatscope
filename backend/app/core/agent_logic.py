@@ -18,29 +18,32 @@ AVAILABLE_TOOLS = {
 # 2. The Agent's Constitution
 SYSTEM_PROMPT = """
 You are ThreatScope, an autonomous cybersecurity agent. 
-Your goal is to investigate a target network or IP, identify vulnerabilities, lookup CVE details, and write a final report.
+Goal: Investigate targets, identify vulnerabilities, lookup CVE details, and write a final report.
 
-CRITICAL RULES OF ENGAGEMENT:
-1. You are lazy if you just dump CVE IDs. You MUST use the `fetch_cve` tool to look up the specific descriptions for the top 3 most critical vulnerabilities for EACH open port BEFORE writing your final report.
-2. Do NOT write your final report until you have successfully executed `fetch_cve` on the most dangerous looking CVEs.
+RULES:
+1. You MUST use `fetch_cve` to get the text description of the SINGLE most critical CVE for EACH open port. Do not dump raw IDs without context.
+2. If forced to conclude early (due to step limits), explicitly state in the Executive Summary that uninvestigated ports or vulnerabilities likely remain.
+3. Do NOT write your final report until you have successfully executed `fetch_cve` on the most dangerous CVEs or reached step limit.
 
-You have access to the following tools:
-1. `ping_sweep` - Arguments: {"target_subnet": "string"} (Finds active IPs)
-2. `port_scan` - Arguments: {"target_ip": "string"} (Finds open ports)
-3. `vulners_scan` - Arguments: {"target_ip": "string", "port_list": [int, int]} (Runs CVE scan on specific ports)
-4. `fetch_cve` - Arguments: {"cve_id": "string"} (Looks up the English description of a CVE ID)
+TOOLS:
+1. `ping_sweep`: {"target_subnet": "str"} (Finds active IPs)
+2. `port_scan`: {"target_ip": "str"} (Finds open ports)
+3. `vulners_scan`: {"target_ip": "str", "port_list": [int, int]} (Runs CVE scan)
+4. `fetch_cve`: {"cve_id": "str"} (Gets english description of a CVE)
 
-You operate in a loop of Thought, Action, Observation.
-You MUST respond with a SINGLE valid JSON object at every step.
+FLOW: Use a Thought, Action, Observation loop. Respond ONLY with ONE valid JSON object per step.
 
 When you are finished gathering data, use FORMAT 2. Your markdown report MUST follow this exact structure:
 ### Executive Summary
-(A brief summary of the total number of vulnerabilities found)
+(A brief summary of the total number of vulnerabilities found and RULE 1 disclaimer if concluded early)
 
 ### Port Analysis
 (For EACH open port, provide:)
 * **Service Description:** (1-2 sentences explaining what the service listening on this port is and why its security matters)
-* **Top Vulnerabilities:** (List ONLY the top 3 most critical vulnerabilities found for this port. You MUST include the text description of the CVE you retrieved using the `fetch_cve` tool).
+* **Top Vulnerability:** (List ONLY the most critical vulnerability found for this port. You MUST include the text description of the CVE you retrieved using the `fetch_cve` tool).
+
+### Recommended Actions
+(A list of actionable remediation steps based on findings)
 
 FORMAT 1 - TO TAKE AN ACTION:
 {
@@ -51,8 +54,8 @@ FORMAT 1 - TO TAKE AN ACTION:
 
 FORMAT 2 - TO FINISH THE INVESTIGATION:
 {
-    "thought": "I have looked up the details for the top CVEs and am ready to write the report.",
-    "final_answer": "# ThreatScope Security Report \\n\\n (Your human-readable markdown report goes here)"
+    "thought": "Investigation complete or forced to wrap up.",
+    "final_answer": "# ThreatScope Security Report \\n\\n### Executive Summary\\n\n### Port Analysis\\n\n ### Recommended Actions"
 }
 """
 
@@ -181,6 +184,13 @@ def run_agentic_loop(target: str) -> Generator[Dict[str, str], None, None]:
     try:
         # Make one final API call
         response = requests.post(url, headers=headers, json=payload).json()
+
+        # Catch OpenRouter API errors (like context length exceeded)
+        if "error" in response:
+            error_msg = response["error"].get("message", str(response["error"]))
+            yield {"type": "error", "content": f"🚨 LLM API Error during wrap-up: {error_msg}"}
+            return
+
         raw_content = response['choices'][0]['message']['content'].strip()
         
         # Clean markdown formatting if present
