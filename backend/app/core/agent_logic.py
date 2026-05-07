@@ -81,6 +81,11 @@ def run_agentic_loop(target: str) -> Generator[Dict[str, str], None, None]:
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"Today's date is {current_date}. Begin your investigation on the target: {target}"}
     ]
+
+    usage_stats = {
+        "total_input_tokens": 0,
+        "total_output_tokens": 0
+    }
     
     api_key = os.getenv("OPENROUTER_API_KEY")
     url = "https://openrouter.ai/api/v1/chat/completions"
@@ -100,6 +105,11 @@ def run_agentic_loop(target: str) -> Generator[Dict[str, str], None, None]:
         
         try:
             response = requests.post(url, headers=headers, json=payload).json()
+
+            usage = response.get("usage", {})
+            usage_stats["total_input_tokens"] += usage.get("prompt_tokens", 0)
+            usage_stats["total_output_tokens"] += usage.get("completion_tokens", 0)
+
         except Exception as e:
             yield {"type": "error", "content": f"Error contacting LLM API: {e}"}
             return
@@ -136,6 +146,11 @@ def run_agentic_loop(target: str) -> Generator[Dict[str, str], None, None]:
         if "final_answer" in agent_decision:
             yield {"type": "log", "content": "✅ Agent reached a conclusion!"}
             yield {"type": "final_answer", "content": agent_decision["final_answer"]}
+            yield {
+                "type": "usage_report", 
+                "content": usage_stats,
+                "total": usage_stats["total_input_tokens"] + usage_stats["total_output_tokens"]
+            }
             return
             
         # 3. The Agent wants to use a tool
@@ -191,6 +206,10 @@ def run_agentic_loop(target: str) -> Generator[Dict[str, str], None, None]:
             yield {"type": "error", "content": f"🚨 LLM API Error during wrap-up: {error_msg}"}
             return
 
+        final_usage = response.get("usage", {})
+        usage_stats["total_input_tokens"] += final_usage.get("prompt_tokens", 0)
+        usage_stats["total_output_tokens"] += final_usage.get("completion_tokens", 0)
+
         raw_content = response['choices'][0]['message']['content'].strip()
         
         # Clean markdown formatting if present
@@ -215,6 +234,12 @@ def run_agentic_loop(target: str) -> Generator[Dict[str, str], None, None]:
             
         yield {"type": "log", "content": "✅ Agent successfully forced a conclusion!"}
         yield {"type": "final_answer", "content": final_report}
+
+        yield {
+            "type": "usage_report", 
+            "content": usage_stats,
+            "total": usage_stats["total_input_tokens"] + usage_stats["total_output_tokens"]
+        }
         
     except Exception as e:
         yield {"type": "error", "content": f"Agent failed to generate forced final report: {e}"}
